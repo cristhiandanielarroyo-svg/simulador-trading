@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TradingView PRO Simulator - Multi-Timeframe & Killzones</title>
+    <title>Daniel Simulator - Multi-Timeframe & Killzones</title>
     <!-- Lightweight Charts v4 -->
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <!-- PapaParse CSV -->
@@ -224,7 +224,7 @@
             position: relative;
         }
 
-        /* Left Drawing Toolbar (TradingView Style) */
+        /* Left Drawing Toolbar */
         .drawing-toolbar {
             width: 48px;
             background-color: #1e222d;
@@ -438,7 +438,7 @@
     <div class="navbar">
         <div class="nav-group">
             <div class="brand">
-                <i class="fa-solid fa-chart-line"></i> TRADINGVIEW SIMULATOR
+                <i class="fa-solid fa-chart-line"></i> DANIEL SIMULATOR
             </div>
             
             <div class="file-upload-btn">
@@ -530,6 +530,9 @@
             <button class="tool-btn" id="toolBox" title="Caja / Rectángulo" onclick="setDrawingTool('box')">
                 <i class="fa-regular fa-square"></i>
             </button>
+            <button class="tool-btn" id="toolText" title="Añadir Texto / Nota" onclick="setDrawingTool('text')">
+                <i class="fa-solid fa-font"></i>
+            </button>
             <button class="tool-btn" id="toolRuler" title="Regla de Medición (Pips / Tiempo)" onclick="setDrawingTool('ruler')">
                 <i class="fa-solid fa-ruler"></i>
             </button>
@@ -563,7 +566,7 @@
                     <div class="ohlc-info" id="ohlcLTF">
                         <span><label>O:</label> <strong id="oLTF">-</strong></span>
                         <span><label>H:</label> <strong id="hLTF">-</strong></span>
-                        <span><label>L:</label> <strong id="lHTF">-</strong></span>
+                        <span><label>L:</label> <strong id="lLTF">-</strong></span>
                         <span><label>C:</label> <strong id="cLTF">-</strong></span>
                     </div>
                 </div>
@@ -576,6 +579,8 @@
                     <button onclick="changeSelectedDrawingColor('#ef5350')" title="Rojo"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef5350;"></span></button>
                     <button onclick="changeSelectedDrawingColor('#26a69a')" title="Verde"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#26a69a;"></span></button>
                     <button onclick="changeSelectedDrawingColor('#ff9800')" title="Naranja"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ff9800;"></span></button>
+                    <div style="width:1px;height:14px;background:#363a45;"></div>
+                    <button onclick="editTextOfSelectedDrawing()" title="Editar Texto"><i class="fa-solid fa-pen"></i></button>
                     <div style="width:1px;height:14px;background:#363a45;"></div>
                     <button class="btn-delete" onclick="deleteSelectedDrawing()" title="Eliminar Dibujo"><i class="fa-solid fa-trash-can"></i></button>
                 </div>
@@ -597,6 +602,11 @@
         
         let currentIndexLTF = 0;
         let isPlaying = false;
+        let playTimer = null;
+        let playbackSpeed = 500;
+        let autoScrollEnabled = true;
+        let isSplitView = false;
+
         // Herramientas de Dibujo y Estado Interactivo
         let currentTool = 'cursor';
         let drawingsLTF = [];
@@ -608,112 +618,84 @@
         let draggedHandleIndex = null;
         let dragInitialPos = { x: 0, y: 0, price1: 0, price2: 0, time1: 0, time2: 0 };
 
-        // Configuración de Sesiones ICT / Killzones
         const KILLZONES_DEF = [
-            { id: 'chkAsia', name: 'Asia', startH: 20, endH: 24, color: 'rgba(255, 152, 0, 0.15)', border: 'rgba(255, 152, 0, 0.8)' },
-            { id: 'chkLondon', name: 'London KZ', startH: 2, endH: 5, color: 'rgba(33, 150, 243, 0.15)', border: 'rgba(33, 150, 243, 0.8)' },
-            { id: 'chkNY', name: 'NY Open KZ', startH: 7, endH: 10, color: 'rgba(76, 175, 80, 0.15)', border: 'rgba(76, 175, 80, 0.8)' },
-            { id: 'chkLondonClose', name: 'London Close', startH: 10, endH: 12, color: 'rgba(156, 39, 176, 0.15)', border: 'rgba(156, 39, 176, 0.8)' }
+            { id: 'chkAsia', name: 'Asia (20-00)', startH: 20, endH: 24, color: 'rgba(255, 152, 0, 0.1)', border: '#ff9800' },
+            { id: 'chkLondon', name: 'London KZ (02-05)', startH: 2, endH: 5, color: 'rgba(33, 150, 243, 0.1)', border: '#2196f3' },
+            { id: 'chkNY', name: 'NY KZ (07-10)', startH: 7, endH: 10, color: 'rgba(76, 175, 80, 0.1)', border: '#4caf50' },
+            { id: 'chkLondonClose', name: 'London Close (10-12)', startH: 10, endH: 12, color: 'rgba(156, 39, 176, 0.1)', border: '#9c27b0' }
         ];
 
-        // INICIALIZACIÓN DE LOS GRÁFICOS
+        // INICIALIZACIÓN DE GRÁFICOS
         function initCharts() {
-            const config = {
+            const chartOptions = {
                 layout: {
-                    background: { color: '#131722' },
+                    background: { type: 'solid', color: '#131722' },
                     textColor: '#d1d4dc',
-                    fontFamily: '-apple-system, BlinkMacSystemFont, Roboto, sans-serif'
                 },
                 grid: {
-                    vertLines: { color: '#1f2431' },
-                    horzLines: { color: '#1f2431' },
+                    vertLines: { color: '#1f2430' },
+                    horzLines: { color: '#1f2430' },
                 },
                 crosshair: {
                     mode: LightweightCharts.CrosshairMode.Normal,
                 },
-                rightPriceScale: {
-                    borderColor: '#2a2e39',
-                    scaleMargins: { top: 0.1, bottom: 0.1 }
-                },
                 timeScale: {
-                    borderColor: '#2a2e39',
                     timeVisible: true,
                     secondsVisible: false,
+                    borderColor: '#2a2e39',
                 },
+                rightPriceScale: {
+                    borderColor: '#2a2e39',
+                }
             };
 
-            // Gráfico LTF (15M)
-            const elemLTF = document.getElementById('chartLTF');
-            chartLTF = LightweightCharts.createChart(elemLTF, config);
+            // LTF Chart (15M)
+            const containerLTF = document.getElementById('chartLTF');
+            chartLTF = LightweightCharts.createChart(containerLTF, chartOptions);
             seriesLTF = chartLTF.addCandlestickSeries({
                 upColor: '#26a69a', downColor: '#ef5350',
-                borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350'
+                borderVisible: false,
+                wickUpColor: '#26a69a', wickDownColor: '#ef5350',
             });
 
-            // Gráfico HTF (4H)
-            const elemHTF = document.getElementById('chartHTF');
-            chartHTF = LightweightCharts.createChart(elemHTF, config);
+            // HTF Chart (4H)
+            const containerHTF = document.getElementById('chartHTF');
+            chartHTF = LightweightCharts.createChart(containerHTF, chartOptions);
             seriesHTF = chartHTF.addCandlestickSeries({
                 upColor: '#26a69a', downColor: '#ef5350',
-                borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350'
+                borderVisible: false,
+                wickUpColor: '#26a69a', wickDownColor: '#ef5350',
             });
 
-            // Detección de Desplazamiento Manual del Usuario (Pausa Auto-scroll)
-            chartLTF.timeScale().subscribeVisibleLogicalRangeChange(() => {
-                renderKillzoneBoxes();
-                renderUserDrawings();
-            });
-
-            // Suscribirse también al cambio de rango de precio/escala
+            // Sincronizar escalas de tiempo y eventos
             chartLTF.timeScale().subscribeVisibleTimeRangeChange(() => {
-                renderKillzoneBoxes();
                 renderUserDrawings();
+                renderKillzoneBoxes();
             });
 
-            elemLTF.addEventListener('mousedown', (e) => {
-                if (currentTool === 'cursor') {
-                    autoScrollEnabled = false;
-                    document.getElementById('btnSnapScroll').style.display = 'flex';
-                }
-            });
-
-            // Listeners para Herramientas de Dibujo Interactivas
             const svgLTF = document.getElementById('svgLTF');
             svgLTF.addEventListener('mousedown', handleDrawingStart);
-            window.addEventListener('mousemove', handleDrawingMove);
-            window.addEventListener('mouseup', handleDrawingEnd);
-
-            // Redibujar al mover la rueda sobre el gráfico
-            elemLTF.addEventListener('wheel', () => {
-                requestAnimationFrame(() => {
-                    renderKillzoneBoxes();
-                    renderUserDrawings();
-                });
-            });
+            svgLTF.addEventListener('mousemove', handleDrawingMove);
+            svgLTF.addEventListener('mouseup', handleDrawingEnd);
 
             window.addEventListener('resize', resizeCharts);
         }
 
         function resizeCharts() {
-            setTimeout(() => {
-                if (chartLTF && document.getElementById('chartLTF')) {
-                    const ltfBox = document.getElementById('chartLTF');
-                    chartLTF.resize(ltfBox.clientWidth, ltfBox.clientHeight);
-                }
-                if (chartHTF && document.getElementById('chartHTF')) {
-                    const htfBox = document.getElementById('chartHTF');
-                    chartHTF.resize(htfBox.clientWidth, htfBox.clientHeight);
-                }
-                renderKillzoneBoxes();
-                renderUserDrawings();
-            }, 50);
-        }
-
-        function resumeAutoScroll() {
-            autoScrollEnabled = true;
-            document.getElementById('btnSnapScroll').style.display = 'none';
-            chartLTF.timeScale().scrollToRealTime();
-            chartHTF.timeScale().scrollToRealTime();
+            if (chartLTF) {
+                chartLTF.resize(
+                    document.getElementById('chartLTF').clientWidth,
+                    document.getElementById('chartLTF').clientHeight
+                );
+            }
+            if (chartHTF) {
+                chartHTF.resize(
+                    document.getElementById('chartHTF').clientWidth,
+                    document.getElementById('chartHTF').clientHeight
+                );
+            }
+            renderUserDrawings();
+            renderKillzoneBoxes();
         }
 
         // SELECCIÓN DE HERRAMIENTAS DE DIBUJO
@@ -726,6 +708,7 @@
                 'line': 'toolLine',
                 'ray': 'toolRay',
                 'box': 'toolBox',
+                'text': 'toolText',
                 'ruler': 'toolRuler'
             };
 
@@ -742,65 +725,78 @@
             }
         }
 
-        function clearDrawings() {
-            drawingsLTF = [];
-            activeDrawing = null;
+        // EDITAR TEXTO DE DIBUJO SELECCIONADO
+        function editTextOfSelectedDrawing() {
+            if (!selectedDrawingId) return;
+            const drawing = drawingsLTF.find(d => d.id === selectedDrawingId);
+            if (!drawing) return;
+
+            const newText = prompt("Ingresa el texto para este dibujo / etiqueta:", drawing.text || "");
+            if (newText !== null) {
+                drawing.text = newText;
+                renderUserDrawings();
+            }
+        }
+
+        function changeSelectedDrawingColor(color) {
+            if (!selectedDrawingId) return;
+            const drawing = drawingsLTF.find(d => d.id === selectedDrawingId);
+            if (!drawing) return;
+
+            drawing.color = color;
+            renderUserDrawings();
+        }
+
+        function deleteSelectedDrawing() {
+            if (!selectedDrawingId) return;
+            drawingsLTF = drawingsLTF.filter(d => d.id !== selectedDrawingId);
             deselectDrawing();
+            renderUserDrawings();
+        }
+
+        function clearDrawings() {
+            if (confirm("¿Estás seguro de borrar todos los dibujos?")) {
+                drawingsLTF = [];
+                deselectDrawing();
+                renderUserDrawings();
+            }
+        }
+
+        function selectDrawing(id, event) {
+            if (event) event.stopPropagation();
+            selectedDrawingId = id;
+            
+            const drawing = drawingsLTF.find(d => d.id === id);
+            const actionsBar = document.getElementById('drawingActionsBar');
+            
+            if (drawing && actionsBar) {
+                actionsBar.style.display = 'flex';
+                // Posicionar barra flotante cerca
+                const timeScale = chartLTF.timeScale();
+                let x = timeScale.timeToCoordinate(drawing.time1);
+                let y = seriesLTF.priceToCoordinate(drawing.price1);
+                
+                if (x !== null && y !== null) {
+                    actionsBar.style.left = `${Math.max(10, Math.min(window.innerWidth - 200, x))}px`;
+                    actionsBar.style.top = `${Math.max(50, y - 40)}px`;
+                }
+            }
             renderUserDrawings();
         }
 
         function deselectDrawing() {
             selectedDrawingId = null;
-            document.getElementById('drawingActionsBar').style.display = 'none';
+            const actionsBar = document.getElementById('drawingActionsBar');
+            if (actionsBar) actionsBar.style.display = 'none';
             renderUserDrawings();
         }
 
-        function selectDrawing(id, e) {
-            if (e) e.stopPropagation();
-            if (currentTool !== 'cursor') return;
-
-            selectedDrawingId = id;
-            const drawing = drawingsLTF.find(d => d.id === id);
-
-            if (drawing) {
-                const bar = document.getElementById('drawingActionsBar');
-                bar.style.display = 'flex';
-                
-                const rect = document.getElementById('chartLTF').getBoundingClientRect();
-                const x1 = chartLTF.timeScale().timeToCoordinate(drawing.time1) || 100;
-                const y1 = seriesLTF.priceToCoordinate(drawing.price1) || 100;
-
-                bar.style.left = `${Math.min(Math.max(x1 - 40, 10), rect.width - 150)}px`;
-                bar.style.top = `${Math.max(y1 - 45, 10)}px`;
-            }
-
-            renderUserDrawings();
-        }
-
-        function deleteSelectedDrawing() {
-            if (selectedDrawingId) {
-                drawingsLTF = drawingsLTF.filter(d => d.id !== selectedDrawingId);
-                deselectDrawing();
-            }
-        }
-
-        function changeSelectedDrawingColor(color) {
-            if (selectedDrawingId) {
-                const drawing = drawingsLTF.find(d => d.id === selectedDrawingId);
-                if (drawing) {
-                    drawing.color = color;
-                    renderUserDrawings();
-                }
-            }
-        }
-
-        // MANEJO DE DIBUJOS INTERACTIVOS, SELECCIÓN Y EDICIÓN DE PUNTOS
+        // MANEJO DE DIBUJOS INTERACTIVOS
         function handleDrawingStart(e) {
             const rect = document.getElementById('chartLTF').getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
 
-            // Si clic afuera o en el lienzo vacio con cursor, deseleccionar
             if (currentTool === 'cursor') {
                 if (e.target.tagName === 'svg' || e.target.classList.contains('drawing-overlay')) {
                     deselectDrawing();
@@ -814,108 +810,76 @@
 
             if (!price || time === null) return;
 
+            if (currentTool === 'text') {
+                const userText = prompt("Ingresa el texto de la nota:", "Orden Block / POI");
+                if (userText) {
+                    const newTextDrawing = {
+                        id: Date.now(),
+                        type: 'text',
+                        color: '#2962ff',
+                        price1: price, price2: price,
+                        time1: time, time2: time,
+                        text: userText
+                    };
+                    drawingsLTF.push(newTextDrawing);
+                    setDrawingTool('cursor');
+                    selectDrawing(newTextDrawing.id, null);
+                } else {
+                    setDrawingTool('cursor');
+                }
+                return;
+            }
+
             activeDrawing = {
                 id: Date.now(),
                 type: currentTool,
                 color: '#2962ff',
                 price1: price, price2: price,
-                time1: time, time2: time
-            };
-        }
-
-        function handleHandleMouseDown(e, drawingId, handleIndex) {
-            e.stopPropagation();
-            if (currentTool !== 'cursor') return;
-
-            isDraggingHandle = true;
-            draggedHandleIndex = handleIndex;
-            selectedDrawingId = drawingId;
-
-            const rect = document.getElementById('chartLTF').getBoundingClientRect();
-            dragInitialPos = {
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top
-            };
-        }
-
-        function handleDrawingBodyMouseDown(e, drawingId) {
-            e.stopPropagation();
-            if (currentTool !== 'cursor') return;
-
-            selectDrawing(drawingId, e);
-
-            isMovingDrawing = true;
-            const rect = document.getElementById('chartLTF').getBoundingClientRect();
-            const drawing = drawingsLTF.find(d => d.id === drawingId);
-
-            dragInitialPos = {
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top,
-                price1: drawing.price1,
-                price2: drawing.price2,
-                time1: drawing.time1,
-                time2: drawing.time2
+                time1: time, time2: time,
+                text: ''
             };
         }
 
         function handleDrawingMove(e) {
+            if (!activeDrawing && !isDraggingHandle && !isMovingDrawing) return;
+
             const rect = document.getElementById('chartLTF').getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
 
-            const currentPrice = seriesLTF.coordinateToPrice(y);
-            const currentTime = chartLTF.timeScale().coordinateToTime(x);
+            const timeScale = chartLTF.timeScale();
+            const time = timeScale.coordinateToTime(x);
+            const price = seriesLTF.coordinateToPrice(y);
 
-            // 1. Dibujando una nueva forma
+            if (!price || time === null) return;
+
             if (activeDrawing) {
-                if (currentPrice !== null) activeDrawing.price2 = currentPrice;
-                if (currentTime !== null) activeDrawing.time2 = currentTime;
+                activeDrawing.time2 = time;
+                activeDrawing.price2 = price;
                 renderUserDrawings();
-                return;
-            }
-
-            // 2. Modificando tirador/punto de ancla
-            if (isDraggingHandle && selectedDrawingId) {
-                const drawing = drawingsLTF.find(d => d.id === selectedDrawingId);
-                if (drawing && currentPrice !== null && currentTime !== null) {
-                    if (draggedHandleIndex === 1) {
-                        drawing.time1 = currentTime;
-                        drawing.price1 = currentPrice;
-                    } else if (draggedHandleIndex === 2) {
-                        drawing.time2 = currentTime;
-                        drawing.price2 = currentPrice;
-                    }
-                    renderUserDrawings();
-                    selectDrawing(selectedDrawingId, null);
-                }
-                return;
-            }
-
-            // 3. Arrastrando todo el dibujo completo
-            if (isMovingDrawing && selectedDrawingId) {
+            } else if (isDraggingHandle && selectedDrawingId) {
                 const drawing = drawingsLTF.find(d => d.id === selectedDrawingId);
                 if (drawing) {
-                    const priceDiff = (currentPrice || 0) - seriesLTF.coordinateToPrice(dragInitialPos.y);
-                    
-                    if (!isNaN(priceDiff)) {
-                        drawing.price1 = dragInitialPos.price1 + priceDiff;
-                        drawing.price2 = dragInitialPos.price2 + priceDiff;
+                    if (draggedHandleIndex === 1) {
+                        drawing.time1 = time;
+                        drawing.price1 = price;
+                    } else if (draggedHandleIndex === 2) {
+                        drawing.time2 = time;
+                        drawing.price2 = price;
                     }
-
-                    if (currentTime !== null) {
-                        const initialTimeX = chartLTF.timeScale().timeToCoordinate(dragInitialPos.time1);
-                        const timeShiftInPx = x - dragInitialPos.x;
-                        const newTime1 = chartLTF.timeScale().coordinateToTime((initialTimeX || 0) + timeShiftInPx);
-                        
-                        if (newTime1 !== null) {
-                            const timeDelta = newTime1 - dragInitialPos.time1;
-                            drawing.time1 = dragInitialPos.time1 + timeDelta;
-                            drawing.time2 = dragInitialPos.time2 + timeDelta;
-                        }
-                    }
-
                     renderUserDrawings();
-                    selectDrawing(selectedDrawingId, null);
+                }
+            } else if (isMovingDrawing && selectedDrawingId) {
+                const drawing = drawingsLTF.find(d => d.id === selectedDrawingId);
+                if (drawing) {
+                    const dt = time - dragInitialPos.time1;
+                    const dp = price - dragInitialPos.price1;
+                    
+                    drawing.time1 = dragInitialPos.time1 + dt;
+                    drawing.time2 = dragInitialPos.time2 + dt;
+                    drawing.price1 = dragInitialPos.price1 + dp;
+                    drawing.price2 = dragInitialPos.price2 + dp;
+                    renderUserDrawings();
                 }
             }
         }
@@ -925,8 +889,6 @@
                 drawingsLTF.push({ ...activeDrawing });
                 selectedDrawingId = activeDrawing.id;
                 activeDrawing = null;
-
-                // Volver al cursor y seleccionar para edición rápida
                 setDrawingTool('cursor');
                 selectDrawing(selectedDrawingId, null);
                 renderUserDrawings();
@@ -937,11 +899,39 @@
             draggedHandleIndex = null;
         }
 
+        function handleDrawingBodyMouseDown(e, id) {
+            e.stopPropagation();
+            if (currentTool === 'cursor') {
+                selectDrawing(id, e);
+                const rect = document.getElementById('chartLTF').getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const timeScale = chartLTF.timeScale();
+
+                isMovingDrawing = true;
+                const drawing = drawingsLTF.find(d => d.id === id);
+                if (drawing) {
+                    dragInitialPos = {
+                        time1: drawing.time1,
+                        time2: drawing.time2,
+                        price1: drawing.price1,
+                        price2: drawing.price2
+                    };
+                }
+            }
+        }
+
+        function handleHandleMouseDown(e, id, handleIndex) {
+            e.stopPropagation();
+            isDraggingHandle = true;
+            draggedHandleIndex = handleIndex;
+            selectDrawing(id, e);
+        }
+
         function renderUserDrawings() {
             const svg = document.getElementById('svgLTF');
             if (!svg) return;
 
-            // Limpiar dibujos previos
             const existingDrawings = svg.querySelectorAll('.user-drawing');
             existingDrawings.forEach(d => d.remove());
 
@@ -988,6 +978,17 @@
                     line.addEventListener('mousedown', (e) => handleDrawingBodyMouseDown(e, d.id));
                     group.appendChild(line);
 
+                    if (d.text) {
+                        const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        txt.setAttribute('x', x1 + 8);
+                        txt.setAttribute('y', y1 - 6);
+                        txt.setAttribute('fill', strokeColor);
+                        txt.setAttribute('font-size', '11px');
+                        txt.setAttribute('font-weight', '600');
+                        txt.textContent = d.text;
+                        group.appendChild(txt);
+                    }
+
                 } else if (d.type === 'box') {
                     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     const rx = Math.min(x1, x2);
@@ -1005,6 +1006,33 @@
 
                     rect.addEventListener('mousedown', (e) => handleDrawingBodyMouseDown(e, d.id));
                     group.appendChild(rect);
+
+                    if (d.text) {
+                        const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        txt.setAttribute('x', rx + 6);
+                        txt.setAttribute('y', ry + 16);
+                        txt.setAttribute('fill', '#ffffff');
+                        txt.setAttribute('font-size', '11px');
+                        txt.setAttribute('font-weight', 'bold');
+                        txt.textContent = d.text;
+                        group.appendChild(txt);
+                    }
+
+                } else if (d.type === 'text') {
+                    const textGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    
+                    const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    txt.setAttribute('x', x1);
+                    txt.setAttribute('y', y1);
+                    txt.setAttribute('fill', strokeColor);
+                    txt.setAttribute('font-size', '13px');
+                    txt.setAttribute('font-weight', 'bold');
+                    txt.setAttribute('style', 'cursor: pointer; user-select: none;');
+                    txt.textContent = d.text || "Nota de Texto";
+
+                    txt.addEventListener('mousedown', (e) => handleDrawingBodyMouseDown(e, d.id));
+                    textGroup.appendChild(txt);
+                    group.appendChild(textGroup);
 
                 } else if (d.type === 'ruler') {
                     const rx = Math.min(x1, x2);
@@ -1036,7 +1064,6 @@
                     group.appendChild(text);
                 }
 
-                // Si está seleccionado, añadir PUNTOS DE CONTROL/MANIJAS (Handles estilo TradingView)
                 if (isSelected && currentTool === 'cursor') {
                     const createHandle = (hx, hy, index) => {
                         const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -1049,7 +1076,9 @@
                     };
 
                     group.appendChild(createHandle(x1, y1, 1));
-                    group.appendChild(createHandle(x2, y2, 2));
+                    if (d.type !== 'text') {
+                        group.appendChild(createHandle(x2, y2, 2));
+                    }
                 }
 
                 svg.appendChild(group);
@@ -1136,7 +1165,6 @@
             }
         }
 
-        // Agregación de Velas M15 a HTF (4 Horas)
         function aggregateHTFCandles(candlesLTF, intervalSeconds) {
             let htfMap = new Map();
 
@@ -1162,7 +1190,6 @@
             return Array.from(htfMap.values()).sort((a, b) => a.time - b.time);
         }
 
-        // ACTUALIZACIÓN SINCRO DE LA VISTA
         function updateSimulationView() {
             if (rawCandlesLTF.length === 0) return;
 
@@ -1173,7 +1200,6 @@
             if (!currentLTFCandle) return;
             
             const currentTimestamp = currentLTFCandle.time;
-
             const visibleHTF = rawCandlesHTF.filter(h => h.time <= currentTimestamp);
             
             if (visibleHTF.length > 0) {
@@ -1197,7 +1223,6 @@
             document.getElementById('currentCandleIndex').innerText = currentIndexLTF;
             document.getElementById('replaySlider').value = currentIndexLTF;
 
-            // Auto-scroll solo si el usuario no desplazó manualmente la pantalla
             if (autoScrollEnabled) {
                 chartLTF.timeScale().scrollToRealTime();
                 chartHTF.timeScale().scrollToRealTime();
@@ -1210,22 +1235,27 @@
         }
 
         function updateOHLCTags(prefix, candle) {
-            document.getElementById(`o${prefix}`).innerText = candle.open.toFixed(5);
-            document.getElementById(`h${prefix}`).innerText = candle.high.toFixed(5);
-            document.getElementById(`l${prefix}`).innerText = candle.low.toFixed(5);
-            document.getElementById(`c${prefix}`).innerText = candle.close.toFixed(5);
+            if (!candle) return;
+            const elemO = document.getElementById(`o${prefix}`);
+            const elemH = document.getElementById(`h${prefix}`);
+            const elemL = document.getElementById(`l${prefix}`);
+            const elemC = document.getElementById(`c${prefix}`);
+
+            if (elemO) elemO.innerText = candle.open.toFixed(5);
+            if (elemH) elemH.innerText = candle.high.toFixed(5);
+            if (elemL) elemL.innerText = candle.low.toFixed(5);
+            if (elemC) elemC.innerText = candle.close.toFixed(5);
         }
 
-        // RENDERIZADO DE CAJAS/RECTÁNGULOS DE KILLZONES (SMC/ICT)
         function renderKillzoneBoxes() {
             renderBoxesForChart(chartLTF, seriesLTF, 'svgLTF');
-            
             const svgHTF = document.getElementById('svgHTF');
             if (svgHTF) svgHTF.innerHTML = '';
         }
 
         function renderBoxesForChart(chartObj, seriesObj, svgId) {
             const svg = document.getElementById(svgId);
+            if (!svg) return;
             const kzBoxes = svg.querySelectorAll('.kz-box');
             kzBoxes.forEach(b => b.remove());
 
@@ -1237,7 +1267,8 @@
             let sessionGroups = [];
 
             KILLZONES_DEF.forEach(kz => {
-                if (!document.getElementById(kz.id).checked) return;
+                const chk = document.getElementById(kz.id);
+                if (!chk || !chk.checked) return;
 
                 let currentSession = null;
 
@@ -1303,13 +1334,14 @@
             });
         }
 
-        // MOTOR DE REPLAY (PLAY / PAUSA)
+        // MOTOR DE REPLAY
         const btnPlayPause = document.getElementById('btnPlayPause');
         const playIcon = document.getElementById('playIcon');
         const playText = document.getElementById('playText');
 
-        btnPlayPause.addEventListener('click', togglePlayPause);
-        document.getElementById('btnStep').addEventListener('click', stepForward);
+        if (btnPlayPause) btnPlayPause.addEventListener('click', togglePlayPause);
+        const btnStep = document.getElementById('btnStep');
+        if (btnStep) btnStep.addEventListener('click', stepForward);
 
         function togglePlayPause() {
             if (isPlaying) {
@@ -1322,9 +1354,9 @@
         function startReplay() {
             if (rawCandlesLTF.length === 0) return;
             isPlaying = true;
-            playIcon.className = 'fa-solid fa-pause';
-            playText.innerText = 'Pausa';
-            btnPlayPause.classList.add('btn-active');
+            if (playIcon) playIcon.className = 'fa-solid fa-pause';
+            if (playText) playText.innerText = 'Pausa';
+            if (btnPlayPause) btnPlayPause.classList.add('btn-active');
 
             playTimer = setInterval(() => {
                 if (currentIndexLTF < rawCandlesLTF.length) {
@@ -1339,9 +1371,9 @@
         function pauseReplay() {
             isPlaying = false;
             clearInterval(playTimer);
-            playIcon.className = 'fa-solid fa-play';
-            playText.innerText = 'Play';
-            btnPlayPause.classList.remove('btn-active');
+            if (playIcon) playIcon.className = 'fa-solid fa-play';
+            if (playText) playText.innerText = 'Play';
+            if (btnPlayPause) btnPlayPause.classList.remove('btn-active');
         }
 
         function stepForward() {
@@ -1352,44 +1384,68 @@
         }
 
         function updateSpeed() {
-            playbackSpeed = parseInt(document.getElementById('speedSelect').value);
+            const speedSel = document.getElementById('speedSelect');
+            if (speedSel) playbackSpeed = parseInt(speedSel.value);
             if (isPlaying) {
                 pauseReplay();
                 startReplay();
             }
         }
 
-        document.getElementById('replaySlider').addEventListener('input', function(e) {
-            currentIndexLTF = parseInt(e.target.value);
-            updateSimulationView();
-        });
+        const replaySlider = document.getElementById('replaySlider');
+        if (replaySlider) {
+            replaySlider.addEventListener('input', function(e) {
+                currentIndexLTF = parseInt(e.target.value);
+                updateSimulationView();
+            });
+        }
 
-        // CONTROL DE LAYOUT (MULTIVENTANA)
-        document.getElementById('btnSingleView').addEventListener('click', () => {
-            isSplitView = false;
-            document.getElementById('containerHTF').style.display = 'none';
-            document.getElementById('containerLTF').style.width = '100%';
-            document.getElementById('btnSingleView').classList.add('btn-active');
-            document.getElementById('btnSplitView').classList.remove('btn-active');
-            resizeCharts();
-        });
+        // CONTROL DE LAYOUT
+        const btnSingleView = document.getElementById('btnSingleView');
+        if (btnSingleView) {
+            btnSingleView.addEventListener('click', () => {
+                isSplitView = false;
+                const containerHTF = document.getElementById('containerHTF');
+                const containerLTF = document.getElementById('containerLTF');
+                if (containerHTF) containerHTF.style.display = 'none';
+                if (containerLTF) containerLTF.style.width = '100%';
+                btnSingleView.classList.add('btn-active');
+                const btnSplitView = document.getElementById('btnSplitView');
+                if (btnSplitView) btnSplitView.classList.remove('btn-active');
+                resizeCharts();
+            });
+        }
 
-        document.getElementById('btnSplitView').addEventListener('click', () => {
-            isSplitView = true;
-            document.getElementById('containerHTF').style.display = 'flex';
-            document.getElementById('containerHTF').style.width = '50%';
-            document.getElementById('containerLTF').style.width = '50%';
-            document.getElementById('btnSplitView').classList.add('btn-active');
-            document.getElementById('btnSingleView').classList.remove('btn-active');
-            resizeCharts();
-            updateSimulationView();
-        });
+        const btnSplitView = document.getElementById('btnSplitView');
+        if (btnSplitView) {
+            btnSplitView.addEventListener('click', () => {
+                isSplitView = true;
+                const containerHTF = document.getElementById('containerHTF');
+                const containerLTF = document.getElementById('containerLTF');
+                if (containerHTF) {
+                    containerHTF.style.display = 'flex';
+                    containerHTF.style.width = '50%';
+                }
+                if (containerLTF) containerLTF.style.width = '50%';
+                btnSplitView.classList.add('btn-active');
+                if (btnSingleView) btnSingleView.classList.remove('btn-active');
+                resizeCharts();
+                updateSimulationView();
+            });
+        }
 
         function renderKillzones() {
             renderKillzoneBoxes();
         }
 
-        // INICIALIZACIÓN GENERAL
+        function resumeAutoScroll() {
+            autoScrollEnabled = true;
+            const btnSnap = document.getElementById('btnSnapScroll');
+            if (btnSnap) btnSnap.style.display = 'none';
+            chartLTF.timeScale().scrollToRealTime();
+        }
+
+        // INICIALIZACIÓN GENERAL AL CARGAR LA PÁGINA
         window.onload = function() {
             initCharts();
         };
