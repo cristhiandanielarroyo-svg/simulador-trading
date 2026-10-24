@@ -144,7 +144,7 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            max-width: 500px;
+            max-width: 400px;
         }
         .timeline-slider input[type="range"] {
             width: 100%;
@@ -214,18 +214,71 @@
             display: inline-block;
         }
 
+        /* Layout Container with Left Sidebar */
+        #app-body {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 88px);
+            width: 100%;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Left Drawing Toolbar (TradingView Style) */
+        .drawing-toolbar {
+            width: 48px;
+            background-color: #1e222d;
+            border-right: 1px solid #2a2e39;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px 0;
+            gap: 6px;
+            z-index: 15;
+        }
+
+        .tool-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 6px;
+            border: 1px solid transparent;
+            background: transparent;
+            color: #787b86;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.15s ease;
+        }
+        .tool-btn:hover {
+            color: #d1d4dc;
+            background: #2a2e39;
+        }
+        .tool-btn.active {
+            color: #ffffff;
+            background: #2962ff;
+        }
+        .tool-divider {
+            width: 24px;
+            height: 1px;
+            background: #2a2e39;
+            margin: 4px 0;
+        }
+
         /* Chart Workspace / Split View */
         #workspace {
             flex: 1;
             display: flex;
-            width: 100%;
-            height: calc(100vh - 88px);
+            flex-direction: row;
+            height: 100%;
             position: relative;
             background-color: #131722;
         }
 
         .chart-container {
-            flex: 1;
+            flex: 1 1 50%;
+            width: 50%;
             height: 100%;
             position: relative;
             border-right: 1px solid #2a2e39;
@@ -273,21 +326,109 @@
             height: 100%;
         }
 
+        /* Auto-scroll Snap Button */
+        .autoscroll-btn {
+            position: absolute;
+            bottom: 30px;
+            right: 20px;
+            z-index: 12;
+            background: rgba(41, 98, 255, 0.9);
+            color: #ffffff;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            transition: all 0.2s ease;
+        }
+        .autoscroll-btn:hover {
+            background: #1e53e5;
+            transform: translateY(-2px);
+        }
+
         /* Layout Switcher Buttons */
         .layout-btn {
             padding: 4px 8px;
             font-size: 12px;
         }
 
-        /* Custom Box Highlights SVG Overlay */
-        .box-overlay {
+        /* Custom SVG Drawing & Box Highlights Overlay */
+        .drawing-overlay {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             pointer-events: none;
-            z-index: 2;
+            z-index: 5;
+            overflow: hidden;
+        }
+        .drawing-overlay.interactive {
+            pointer-events: auto;
+            cursor: crosshair;
+        }
+        .drawing-overlay .user-drawing {
+            pointer-events: auto;
+            cursor: pointer;
+        }
+        .drawing-overlay .user-drawing:hover path,
+        .drawing-overlay .user-drawing:hover line,
+        .drawing-overlay .user-drawing:hover rect {
+            stroke-width: 2.5px !important;
+            filter: drop-shadow(0 0 5px rgba(41, 98, 255, 0.8));
+        }
+
+        /* Interactive Drawing Handles & Actions */
+        .drawing-handle {
+            pointer-events: auto;
+            cursor: grab;
+            fill: #ffffff;
+            stroke: #2962ff;
+            stroke-width: 2px;
+            transition: transform 0.1s ease;
+        }
+        .drawing-handle:hover {
+            transform: scale(1.3);
+            fill: #2962ff;
+            stroke: #ffffff;
+            cursor: grabbing;
+        }
+
+        /* Floating Actions Toolbar for Selected Drawing */
+        .drawing-actions-bar {
+            position: absolute;
+            z-index: 25;
+            background: #1e222d;
+            border: 1px solid #363a45;
+            border-radius: 6px;
+            padding: 4px 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            pointer-events: auto;
+        }
+        .drawing-actions-bar button {
+            background: transparent;
+            border: none;
+            color: #d1d4dc;
+            padding: 4px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .drawing-actions-bar button:hover {
+            background: #2a2e39;
+            color: #ffffff;
+        }
+        .drawing-actions-bar button.btn-delete:hover {
+            background: rgba(239, 83, 80, 0.2);
+            color: #ef5350;
         }
     </style>
 </head>
@@ -310,7 +451,6 @@
 
         <!-- Indicadores & Layout Switcher -->
         <div class="nav-group">
-            <!-- Selector de Layout -->
             <div style="display: flex; gap: 2px; background: #2a2e39; padding: 2px; border-radius: 4px;">
                 <button class="btn layout-btn btn-active" id="btnSingleView" title="Vista Única"><i class="fa-solid fa-square"></i></button>
                 <button class="btn layout-btn" id="btnSplitView" title="Vista Dividida (4H / 15M)"><i class="fa-solid fa-columns"></i></button>
@@ -373,36 +513,77 @@
         </div>
     </div>
 
-    <!-- Workspace Multiventana -->
-    <div id="workspace">
-        <!-- Gráfico 1: HTF (4H / Principal) -->
-        <div class="chart-container" id="containerHTF" style="display: none;">
-            <div class="chart-header">
-                <span class="timeframe-tag">4 HORA (HTF)</span>
-                <div class="ohlc-info" id="ohlcHTF">
-                    <span><label>O:</label> <strong id="oHTF">-</strong></span>
-                    <span><label>H:</label> <strong id="hHTF">-</strong></span>
-                    <span><label>L:</label> <strong id="lHTF">-</strong></span>
-                    <span><label>C:</label> <strong id="cHTF">-</strong></span>
-                </div>
-            </div>
-            <div class="chart-box" id="chartHTF"></div>
-            <svg class="box-overlay" id="svgHTF"></svg>
+    <!-- Main Workspace with Left Toolbar -->
+    <div id="app-body">
+        <!-- Left Toolbar Drawing Tools -->
+        <div class="drawing-toolbar">
+            <button class="tool-btn active" id="toolCursor" title="Cursor Navegación" onclick="setDrawingTool('cursor')">
+                <i class="fa-solid fa-mouse-pointer"></i>
+            </button>
+            <div class="tool-divider"></div>
+            <button class="tool-btn" id="toolLine" title="Línea de Tendencia" onclick="setDrawingTool('line')">
+                <i class="fa-solid fa-slash"></i>
+            </button>
+            <button class="tool-btn" id="toolRay" title="Rayo Horizontal" onclick="setDrawingTool('ray')">
+                <i class="fa-solid fa-arrows-left-right-to-line"></i>
+            </button>
+            <button class="tool-btn" id="toolBox" title="Caja / Rectángulo" onclick="setDrawingTool('box')">
+                <i class="fa-regular fa-square"></i>
+            </button>
+            <button class="tool-btn" id="toolRuler" title="Regla de Medición (Pips / Tiempo)" onclick="setDrawingTool('ruler')">
+                <i class="fa-solid fa-ruler"></i>
+            </button>
+            <div class="tool-divider"></div>
+            <button class="tool-btn" id="toolClear" title="Borrar Todos los Dibujos" onclick="clearDrawings()">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
         </div>
 
-        <!-- Gráfico 2: LTF (15M / Principal) -->
-        <div class="chart-container" id="containerLTF">
-            <div class="chart-header">
-                <span class="timeframe-tag" style="color: #26a69a; background: rgba(38, 166, 154, 0.15);">15 MIN (LTF)</span>
-                <div class="ohlc-info" id="ohlcLTF">
-                    <span><label>O:</label> <strong id="oLTF">-</strong></span>
-                    <span><label>H:</label> <strong id="hLTF">-</strong></span>
-                    <span><label>L:</label> <strong id="lLTF">-</strong></span>
-                    <span><label>C:</label> <strong id="cLTF">-</strong></span>
+        <!-- Workspace Multiventana -->
+        <div id="workspace">
+            <!-- Gráfico 1: HTF (4H / Principal) -->
+            <div class="chart-container" id="containerHTF" style="display: none;">
+                <div class="chart-header">
+                    <span class="timeframe-tag">4 HORA (HTF)</span>
+                    <div class="ohlc-info" id="ohlcHTF">
+                        <span><label>O:</label> <strong id="oHTF">-</strong></span>
+                        <span><label>H:</label> <strong id="hHTF">-</strong></span>
+                        <span><label>L:</label> <strong id="lHTF">-</strong></span>
+                        <span><label>C:</label> <strong id="cHTF">-</strong></span>
+                    </div>
                 </div>
+                <div class="chart-box" id="chartHTF"></div>
+                <svg class="drawing-overlay" id="svgHTF"></svg>
             </div>
-            <div class="chart-box" id="chartLTF"></div>
-            <svg class="box-overlay" id="svgLTF"></svg>
+
+            <!-- Gráfico 2: LTF (15M / Principal) -->
+            <div class="chart-container" id="containerLTF">
+                <div class="chart-header">
+                    <span class="timeframe-tag" style="color: #26a69a; background: rgba(38, 166, 154, 0.15);">15 MIN (LTF)</span>
+                    <div class="ohlc-info" id="ohlcLTF">
+                        <span><label>O:</label> <strong id="oLTF">-</strong></span>
+                        <span><label>H:</label> <strong id="hLTF">-</strong></span>
+                        <span><label>L:</label> <strong id="lHTF">-</strong></span>
+                        <span><label>C:</label> <strong id="cLTF">-</strong></span>
+                    </div>
+                </div>
+                <div class="chart-box" id="chartLTF"></div>
+                <svg class="drawing-overlay" id="svgLTF"></svg>
+                
+                <!-- Floating Drawing Actions Floating Bar -->
+                <div class="drawing-actions-bar" id="drawingActionsBar" style="display: none;">
+                    <button onclick="changeSelectedDrawingColor('#2962ff')" title="Azul"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#2962ff;"></span></button>
+                    <button onclick="changeSelectedDrawingColor('#ef5350')" title="Rojo"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef5350;"></span></button>
+                    <button onclick="changeSelectedDrawingColor('#26a69a')" title="Verde"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#26a69a;"></span></button>
+                    <button onclick="changeSelectedDrawingColor('#ff9800')" title="Naranja"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ff9800;"></span></button>
+                    <div style="width:1px;height:14px;background:#363a45;"></div>
+                    <button class="btn-delete" onclick="deleteSelectedDrawing()" title="Eliminar Dibujo"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+
+                <button class="autoscroll-btn" id="btnSnapScroll" onclick="resumeAutoScroll()">
+                    <i class="fa-solid fa-arrow-right-to-line"></i> Ir a Vela Actual
+                </button>
+            </div>
         </div>
     </div>
 
@@ -411,15 +592,21 @@
         let chartLTF, seriesLTF;
         let chartHTF, seriesHTF;
         
-        let rawCandlesLTF = [];  // Datos M15
-        let rawCandlesHTF = [];  // Datos H4 Agregados
+        let rawCandlesLTF = [];
+        let rawCandlesHTF = [];
         
         let currentIndexLTF = 0;
         let isPlaying = false;
-        let playTimer = null;
-        let playbackSpeed = 500; // ms por vela
+        // Herramientas de Dibujo y Estado Interactivo
+        let currentTool = 'cursor';
+        let drawingsLTF = [];
+        let activeDrawing = null;
+        let selectedDrawingId = null;
 
-        let isSplitView = false;
+        let isDraggingHandle = false;
+        let isMovingDrawing = false;
+        let draggedHandleIndex = null;
+        let dragInitialPos = { x: 0, y: 0, price1: 0, price2: 0, time1: 0, time2: 0 };
 
         // Configuración de Sesiones ICT / Killzones
         const KILLZONES_DEF = [
@@ -471,22 +658,402 @@
                 borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350'
             });
 
-            // Redimensionamiento Responsivo
-            window.addEventListener('resize', resizeCharts);
+            // Detección de Desplazamiento Manual del Usuario (Pausa Auto-scroll)
+            chartLTF.timeScale().subscribeVisibleLogicalRangeChange(() => {
+                renderKillzoneBoxes();
+                renderUserDrawings();
+            });
 
-            // Redibujar cajas al mover o hacer zoom en el gráfico
-            chartLTF.timeScale().subscribeVisibleTimeRangeChange(() => renderKillzoneBoxes());
-            chartHTF.timeScale().subscribeVisibleTimeRangeChange(() => renderKillzoneBoxes());
+            // Suscribirse también al cambio de rango de precio/escala
+            chartLTF.timeScale().subscribeVisibleTimeRangeChange(() => {
+                renderKillzoneBoxes();
+                renderUserDrawings();
+            });
+
+            elemLTF.addEventListener('mousedown', (e) => {
+                if (currentTool === 'cursor') {
+                    autoScrollEnabled = false;
+                    document.getElementById('btnSnapScroll').style.display = 'flex';
+                }
+            });
+
+            // Listeners para Herramientas de Dibujo Interactivas
+            const svgLTF = document.getElementById('svgLTF');
+            svgLTF.addEventListener('mousedown', handleDrawingStart);
+            window.addEventListener('mousemove', handleDrawingMove);
+            window.addEventListener('mouseup', handleDrawingEnd);
+
+            // Redibujar al mover la rueda sobre el gráfico
+            elemLTF.addEventListener('wheel', () => {
+                requestAnimationFrame(() => {
+                    renderKillzoneBoxes();
+                    renderUserDrawings();
+                });
+            });
+
+            window.addEventListener('resize', resizeCharts);
         }
 
         function resizeCharts() {
-            if (chartLTF && document.getElementById('chartLTF').clientWidth) {
-                chartLTF.resize(document.getElementById('chartLTF').clientWidth, document.getElementById('chartLTF').clientHeight);
+            setTimeout(() => {
+                if (chartLTF && document.getElementById('chartLTF')) {
+                    const ltfBox = document.getElementById('chartLTF');
+                    chartLTF.resize(ltfBox.clientWidth, ltfBox.clientHeight);
+                }
+                if (chartHTF && document.getElementById('chartHTF')) {
+                    const htfBox = document.getElementById('chartHTF');
+                    chartHTF.resize(htfBox.clientWidth, htfBox.clientHeight);
+                }
+                renderKillzoneBoxes();
+                renderUserDrawings();
+            }, 50);
+        }
+
+        function resumeAutoScroll() {
+            autoScrollEnabled = true;
+            document.getElementById('btnSnapScroll').style.display = 'none';
+            chartLTF.timeScale().scrollToRealTime();
+            chartHTF.timeScale().scrollToRealTime();
+        }
+
+        // SELECCIÓN DE HERRAMIENTAS DE DIBUJO
+        function setDrawingTool(tool) {
+            currentTool = tool;
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+
+            const toolBtnMap = {
+                'cursor': 'toolCursor',
+                'line': 'toolLine',
+                'ray': 'toolRay',
+                'box': 'toolBox',
+                'ruler': 'toolRuler'
+            };
+
+            if (toolBtnMap[tool]) {
+                document.getElementById(toolBtnMap[tool]).classList.add('active');
             }
-            if (chartHTF && document.getElementById('chartHTF').clientWidth) {
-                chartHTF.resize(document.getElementById('chartHTF').clientWidth, document.getElementById('chartHTF').clientHeight);
+
+            const svgLTF = document.getElementById('svgLTF');
+            if (tool !== 'cursor') {
+                deselectDrawing();
+                svgLTF.classList.add('interactive');
+            } else {
+                svgLTF.classList.remove('interactive');
             }
-            renderKillzoneBoxes();
+        }
+
+        function clearDrawings() {
+            drawingsLTF = [];
+            activeDrawing = null;
+            deselectDrawing();
+            renderUserDrawings();
+        }
+
+        function deselectDrawing() {
+            selectedDrawingId = null;
+            document.getElementById('drawingActionsBar').style.display = 'none';
+            renderUserDrawings();
+        }
+
+        function selectDrawing(id, e) {
+            if (e) e.stopPropagation();
+            if (currentTool !== 'cursor') return;
+
+            selectedDrawingId = id;
+            const drawing = drawingsLTF.find(d => d.id === id);
+
+            if (drawing) {
+                const bar = document.getElementById('drawingActionsBar');
+                bar.style.display = 'flex';
+                
+                const rect = document.getElementById('chartLTF').getBoundingClientRect();
+                const x1 = chartLTF.timeScale().timeToCoordinate(drawing.time1) || 100;
+                const y1 = seriesLTF.priceToCoordinate(drawing.price1) || 100;
+
+                bar.style.left = `${Math.min(Math.max(x1 - 40, 10), rect.width - 150)}px`;
+                bar.style.top = `${Math.max(y1 - 45, 10)}px`;
+            }
+
+            renderUserDrawings();
+        }
+
+        function deleteSelectedDrawing() {
+            if (selectedDrawingId) {
+                drawingsLTF = drawingsLTF.filter(d => d.id !== selectedDrawingId);
+                deselectDrawing();
+            }
+        }
+
+        function changeSelectedDrawingColor(color) {
+            if (selectedDrawingId) {
+                const drawing = drawingsLTF.find(d => d.id === selectedDrawingId);
+                if (drawing) {
+                    drawing.color = color;
+                    renderUserDrawings();
+                }
+            }
+        }
+
+        // MANEJO DE DIBUJOS INTERACTIVOS, SELECCIÓN Y EDICIÓN DE PUNTOS
+        function handleDrawingStart(e) {
+            const rect = document.getElementById('chartLTF').getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            // Si clic afuera o en el lienzo vacio con cursor, deseleccionar
+            if (currentTool === 'cursor') {
+                if (e.target.tagName === 'svg' || e.target.classList.contains('drawing-overlay')) {
+                    deselectDrawing();
+                }
+                return;
+            }
+
+            const timeScale = chartLTF.timeScale();
+            const time = timeScale.coordinateToTime(x);
+            const price = seriesLTF.coordinateToPrice(y);
+
+            if (!price || time === null) return;
+
+            activeDrawing = {
+                id: Date.now(),
+                type: currentTool,
+                color: '#2962ff',
+                price1: price, price2: price,
+                time1: time, time2: time
+            };
+        }
+
+        function handleHandleMouseDown(e, drawingId, handleIndex) {
+            e.stopPropagation();
+            if (currentTool !== 'cursor') return;
+
+            isDraggingHandle = true;
+            draggedHandleIndex = handleIndex;
+            selectedDrawingId = drawingId;
+
+            const rect = document.getElementById('chartLTF').getBoundingClientRect();
+            dragInitialPos = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        }
+
+        function handleDrawingBodyMouseDown(e, drawingId) {
+            e.stopPropagation();
+            if (currentTool !== 'cursor') return;
+
+            selectDrawing(drawingId, e);
+
+            isMovingDrawing = true;
+            const rect = document.getElementById('chartLTF').getBoundingClientRect();
+            const drawing = drawingsLTF.find(d => d.id === drawingId);
+
+            dragInitialPos = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top,
+                price1: drawing.price1,
+                price2: drawing.price2,
+                time1: drawing.time1,
+                time2: drawing.time2
+            };
+        }
+
+        function handleDrawingMove(e) {
+            const rect = document.getElementById('chartLTF').getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const currentPrice = seriesLTF.coordinateToPrice(y);
+            const currentTime = chartLTF.timeScale().coordinateToTime(x);
+
+            // 1. Dibujando una nueva forma
+            if (activeDrawing) {
+                if (currentPrice !== null) activeDrawing.price2 = currentPrice;
+                if (currentTime !== null) activeDrawing.time2 = currentTime;
+                renderUserDrawings();
+                return;
+            }
+
+            // 2. Modificando tirador/punto de ancla
+            if (isDraggingHandle && selectedDrawingId) {
+                const drawing = drawingsLTF.find(d => d.id === selectedDrawingId);
+                if (drawing && currentPrice !== null && currentTime !== null) {
+                    if (draggedHandleIndex === 1) {
+                        drawing.time1 = currentTime;
+                        drawing.price1 = currentPrice;
+                    } else if (draggedHandleIndex === 2) {
+                        drawing.time2 = currentTime;
+                        drawing.price2 = currentPrice;
+                    }
+                    renderUserDrawings();
+                    selectDrawing(selectedDrawingId, null);
+                }
+                return;
+            }
+
+            // 3. Arrastrando todo el dibujo completo
+            if (isMovingDrawing && selectedDrawingId) {
+                const drawing = drawingsLTF.find(d => d.id === selectedDrawingId);
+                if (drawing) {
+                    const priceDiff = (currentPrice || 0) - seriesLTF.coordinateToPrice(dragInitialPos.y);
+                    
+                    if (!isNaN(priceDiff)) {
+                        drawing.price1 = dragInitialPos.price1 + priceDiff;
+                        drawing.price2 = dragInitialPos.price2 + priceDiff;
+                    }
+
+                    if (currentTime !== null) {
+                        const initialTimeX = chartLTF.timeScale().timeToCoordinate(dragInitialPos.time1);
+                        const timeShiftInPx = x - dragInitialPos.x;
+                        const newTime1 = chartLTF.timeScale().coordinateToTime((initialTimeX || 0) + timeShiftInPx);
+                        
+                        if (newTime1 !== null) {
+                            const timeDelta = newTime1 - dragInitialPos.time1;
+                            drawing.time1 = dragInitialPos.time1 + timeDelta;
+                            drawing.time2 = dragInitialPos.time2 + timeDelta;
+                        }
+                    }
+
+                    renderUserDrawings();
+                    selectDrawing(selectedDrawingId, null);
+                }
+            }
+        }
+
+        function handleDrawingEnd() {
+            if (activeDrawing) {
+                drawingsLTF.push({ ...activeDrawing });
+                selectedDrawingId = activeDrawing.id;
+                activeDrawing = null;
+
+                // Volver al cursor y seleccionar para edición rápida
+                setDrawingTool('cursor');
+                selectDrawing(selectedDrawingId, null);
+                renderUserDrawings();
+            }
+
+            isDraggingHandle = false;
+            isMovingDrawing = false;
+            draggedHandleIndex = null;
+        }
+
+        function renderUserDrawings() {
+            const svg = document.getElementById('svgLTF');
+            if (!svg) return;
+
+            // Limpiar dibujos previos
+            const existingDrawings = svg.querySelectorAll('.user-drawing');
+            existingDrawings.forEach(d => d.remove());
+
+            const allToRender = [...drawingsLTF];
+            if (activeDrawing) allToRender.push(activeDrawing);
+
+            const timeScale = chartLTF.timeScale();
+
+            allToRender.forEach(d => {
+                if (d.time1 === null || d.time2 === null || d.price1 === null || d.price2 === null) return;
+
+                let x1 = timeScale.timeToCoordinate(d.time1);
+                let x2 = timeScale.timeToCoordinate(d.time2);
+                let y1 = seriesLTF.priceToCoordinate(d.price1);
+                let y2 = seriesLTF.priceToCoordinate(d.price2);
+
+                if (x1 === null || x2 === null || y1 === null || y2 === null) return;
+
+                const isSelected = d.id === selectedDrawingId;
+                const strokeColor = d.color || '#2962ff';
+
+                const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                group.setAttribute('class', 'user-drawing');
+                if (d.id) {
+                    group.setAttribute('data-id', d.id);
+                }
+
+                if (d.type === 'line' || d.type === 'ray') {
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    let targetX2 = x2;
+                    if (d.type === 'ray') {
+                        targetX2 = x2 >= x1 ? 4000 : -4000;
+                    }
+                    line.setAttribute('x1', x1);
+                    line.setAttribute('y1', y1);
+                    line.setAttribute('x2', targetX2);
+                    line.setAttribute('y2', y2);
+                    line.setAttribute('stroke', strokeColor);
+                    line.setAttribute('stroke-width', isSelected ? '2.5' : '2');
+                    if (isSelected) {
+                        line.setAttribute('stroke-dasharray', d.type === 'ray' ? 'none' : '2');
+                    }
+
+                    line.addEventListener('mousedown', (e) => handleDrawingBodyMouseDown(e, d.id));
+                    group.appendChild(line);
+
+                } else if (d.type === 'box') {
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    const rx = Math.min(x1, x2);
+                    const ry = Math.min(y1, y2);
+                    const rw = Math.abs(x2 - x1);
+                    const rh = Math.abs(y2 - y1);
+                    rect.setAttribute('x', rx);
+                    rect.setAttribute('y', ry);
+                    rect.setAttribute('width', Math.max(rw, 2));
+                    rect.setAttribute('height', Math.max(rh, 2));
+                    rect.setAttribute('fill', strokeColor === '#2962ff' ? 'rgba(41, 98, 255, 0.2)' : `${strokeColor}33`);
+                    rect.setAttribute('stroke', strokeColor);
+                    rect.setAttribute('stroke-width', isSelected ? '2' : '1.5');
+                    rect.setAttribute('rx', '3');
+
+                    rect.addEventListener('mousedown', (e) => handleDrawingBodyMouseDown(e, d.id));
+                    group.appendChild(rect);
+
+                } else if (d.type === 'ruler') {
+                    const rx = Math.min(x1, x2);
+                    const ry = Math.min(y1, y2);
+                    const rw = Math.abs(x2 - x1);
+                    const rh = Math.abs(y2 - y1);
+
+                    const box = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    box.setAttribute('x', rx);
+                    box.setAttribute('y', ry);
+                    box.setAttribute('width', rw);
+                    box.setAttribute('height', rh);
+                    box.setAttribute('fill', 'rgba(156, 39, 176, 0.15)');
+                    box.setAttribute('stroke', '#9c27b0');
+                    box.setAttribute('stroke-width', '1');
+                    box.setAttribute('stroke-dasharray', '4');
+
+                    const pips = Math.abs((d.price2 - d.price1) * 10000).toFixed(1);
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', rx + 5);
+                    text.setAttribute('y', ry + 15);
+                    text.setAttribute('fill', '#e1bee7');
+                    text.setAttribute('font-size', '11px');
+                    text.setAttribute('font-weight', 'bold');
+                    text.textContent = `📏 ${pips} Pips | Δ: ${Math.abs(d.price2 - d.price1).toFixed(5)}`;
+
+                    box.addEventListener('mousedown', (e) => handleDrawingBodyMouseDown(e, d.id));
+                    group.appendChild(box);
+                    group.appendChild(text);
+                }
+
+                // Si está seleccionado, añadir PUNTOS DE CONTROL/MANIJAS (Handles estilo TradingView)
+                if (isSelected && currentTool === 'cursor') {
+                    const createHandle = (hx, hy, index) => {
+                        const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                        handle.setAttribute('cx', hx);
+                        handle.setAttribute('cy', hy);
+                        handle.setAttribute('r', '5');
+                        handle.setAttribute('class', 'drawing-handle');
+                        handle.addEventListener('mousedown', (e) => handleHandleMouseDown(e, d.id, index));
+                        return handle;
+                    };
+
+                    group.appendChild(createHandle(x1, y1, 1));
+                    group.appendChild(createHandle(x2, y2, 2));
+                }
+
+                svg.appendChild(group);
+            });
         }
 
         // CONTROL DEL DESPLEGABLE
@@ -532,7 +1099,6 @@
                         let close = parseFloat(row[5]);
 
                         if (!isNaN(open) && !isNaN(close)) {
-                            // Convertir a UNIX Timestamp en segundos
                             let timeSec = Math.floor(dateObj.getTime() / 1000) - (dateObj.getTimezoneOffset() * 60);
 
                             rawCandlesLTF.push({
@@ -548,14 +1114,11 @@
                 }
             });
 
-            // Ordenar cronológicamente
             rawCandlesLTF.sort((a, b) => a.time - b.time);
 
             if (rawCandlesLTF.length > 0) {
-                // Generar Velas HTF (4 Horas = 14400s)
                 rawCandlesHTF = aggregateHTFCandles(rawCandlesLTF, 14400);
 
-                // Resetear estado
                 currentIndexLTF = Math.min(80, rawCandlesLTF.length);
                 
                 const slider = document.getElementById('replaySlider');
@@ -586,7 +1149,7 @@
                         high: c.high,
                         low: c.low,
                         close: c.close,
-                        rawDate: c.rawDate
+                        rawDate: new Date(htfTime * 1000)
                     });
                 } else {
                     let htfCandle = htfMap.get(htfTime);
@@ -603,34 +1166,47 @@
         function updateSimulationView() {
             if (rawCandlesLTF.length === 0) return;
 
-            // Velas M15 visibles
             const visibleLTF = rawCandlesLTF.slice(0, currentIndexLTF);
             seriesLTF.setData(visibleLTF);
 
-            // Obtener el tiempo actual del Replay
             const currentLTFCandle = visibleLTF[visibleLTF.length - 1];
+            if (!currentLTFCandle) return;
+            
             const currentTimestamp = currentLTFCandle.time;
 
-            // Filtrar y actualizar velas HTF acumuladas hasta el tiempo actual
             const visibleHTF = rawCandlesHTF.filter(h => h.time <= currentTimestamp);
+            
+            if (visibleHTF.length > 0) {
+                const lastHTF = visibleHTF[visibleHTF.length - 1];
+                const candlesInCurrentHTF = visibleLTF.filter(c => c.time >= lastHTF.time);
+                
+                if (candlesInCurrentHTF.length > 0) {
+                    lastHTF.high = Math.max(...candlesInCurrentHTF.map(c => c.high));
+                    lastHTF.low = Math.min(...candlesInCurrentHTF.map(c => c.low));
+                    lastHTF.close = currentLTFCandle.close;
+                }
+            }
+
             seriesHTF.setData(visibleHTF);
 
-            // Actualizar etiquetas OHLC
             updateOHLCTags('LTF', currentLTFCandle);
             if (visibleHTF.length > 0) {
                 updateOHLCTags('HTF', visibleHTF[visibleHTF.length - 1]);
             }
 
-            // Actualizar Slider y Contadores
             document.getElementById('currentCandleIndex').innerText = currentIndexLTF;
             document.getElementById('replaySlider').value = currentIndexLTF;
 
-            // Auto-scroll
-            chartLTF.timeScale().scrollToRealTime();
-            chartHTF.timeScale().scrollToRealTime();
+            // Auto-scroll solo si el usuario no desplazó manualmente la pantalla
+            if (autoScrollEnabled) {
+                chartLTF.timeScale().scrollToRealTime();
+                chartHTF.timeScale().scrollToRealTime();
+            }
 
-            // Renderizar cajas de Killzones
-            setTimeout(renderKillzoneBoxes, 30);
+            setTimeout(() => {
+                renderKillzoneBoxes();
+                renderUserDrawings();
+            }, 30);
         }
 
         function updateOHLCTags(prefix, candle) {
@@ -642,26 +1218,22 @@
 
         // RENDERIZADO DE CAJAS/RECTÁNGULOS DE KILLZONES (SMC/ICT)
         function renderKillzoneBoxes() {
-            // Solo renderizar Killzones en el gráfico de 15M (LTF)
             renderBoxesForChart(chartLTF, seriesLTF, 'svgLTF');
             
-            // Limpiar el overlay SVG de HTF para que el gráfico de 4H permanezca limpio
             const svgHTF = document.getElementById('svgHTF');
-            if (svgHTF) {
-                svgHTF.innerHTML = '';
-            }
+            if (svgHTF) svgHTF.innerHTML = '';
         }
 
         function renderBoxesForChart(chartObj, seriesObj, svgId) {
             const svg = document.getElementById(svgId);
-            svg.innerHTML = ''; // Limpiar previo
+            const kzBoxes = svg.querySelectorAll('.kz-box');
+            kzBoxes.forEach(b => b.remove());
 
             if (rawCandlesLTF.length === 0) return;
 
             const timeScale = chartObj.timeScale();
             const visibleLTF = rawCandlesLTF.slice(0, currentIndexLTF);
 
-            // Agrupar velas por días y detectar Killzones
             let sessionGroups = [];
 
             KILLZONES_DEF.forEach(kz => {
@@ -693,7 +1265,6 @@
                 });
             });
 
-            // Dibujar rectángulos en la capa SVG
             sessionGroups.forEach(s => {
                 const x1 = timeScale.timeToCoordinate(s.startTime);
                 const x2 = timeScale.timeToCoordinate(s.endTime);
@@ -703,6 +1274,9 @@
                 if (x1 !== null && x2 !== null && y1 !== null && y2 !== null) {
                     const width = Math.max(x2 - x1, 15);
                     const height = Math.max(y2 - y1, 10);
+
+                    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    group.setAttribute('class', 'kz-box');
 
                     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     rect.setAttribute('x', x1 - 5);
@@ -714,7 +1288,6 @@
                     rect.setAttribute('stroke-width', '1.5');
                     rect.setAttribute('rx', '4');
 
-                    // Etiqueta del nombre de la Sesión
                     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                     text.setAttribute('x', x1 - 2);
                     text.setAttribute('y', y1 - 4);
@@ -723,13 +1296,14 @@
                     text.setAttribute('font-weight', 'bold');
                     text.textContent = s.kz.name;
 
-                    svg.appendChild(rect);
-                    svg.appendChild(text);
+                    group.appendChild(rect);
+                    group.appendChild(text);
+                    svg.appendChild(group);
                 }
             });
         }
 
-        // MOTOR DE REPLAY (PLAY / PAUSA CORREGIDO)
+        // MOTOR DE REPLAY (PLAY / PAUSA)
         const btnPlayPause = document.getElementById('btnPlayPause');
         const playIcon = document.getElementById('playIcon');
         const playText = document.getElementById('playText');
@@ -794,6 +1368,7 @@
         document.getElementById('btnSingleView').addEventListener('click', () => {
             isSplitView = false;
             document.getElementById('containerHTF').style.display = 'none';
+            document.getElementById('containerLTF').style.width = '100%';
             document.getElementById('btnSingleView').classList.add('btn-active');
             document.getElementById('btnSplitView').classList.remove('btn-active');
             resizeCharts();
@@ -802,6 +1377,8 @@
         document.getElementById('btnSplitView').addEventListener('click', () => {
             isSplitView = true;
             document.getElementById('containerHTF').style.display = 'flex';
+            document.getElementById('containerHTF').style.width = '50%';
+            document.getElementById('containerLTF').style.width = '50%';
             document.getElementById('btnSplitView').classList.add('btn-active');
             document.getElementById('btnSingleView').classList.remove('btn-active');
             resizeCharts();
